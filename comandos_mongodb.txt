@@ -1,0 +1,403 @@
+=====================================================================
+  GUIA DE COMANDOS MONGODB (versão 2, exemplos de outro tema)
+  Banco de exemplo: "escola"
+    alunos:      { nome, idade, curso, ativo, email, endereco:{cidade,estado},
+                   hobbies:[...], ingresso: Date }
+    disciplinas: { nome, cargaHoraria, professor:{nome,titulacao}, tags:[...] }
+    avaliacoes:  { alunoId, disciplinaId, nota, semestre, itens:[{tipo,valor}] }
+=====================================================================
+
+---------------------------------------------------------------------
+1. BANCOS E COLEÇÕES
+---------------------------------------------------------------------
+
+show dbs                              // lista os bancos
+use escola                            // seleciona o banco (no Playground: use("escola");)
+db                                    // mostra o banco atual
+show collections                      // lista as coleções
+db.createCollection("turmas")         // cria coleção vazia
+db.alunos.drop()                      // apaga a coleção
+db.dropDatabase()                     // apaga o banco atual
+db.alunos.renameCollection("estudantes")
+
+
+---------------------------------------------------------------------
+2. INSERT
+---------------------------------------------------------------------
+
+// Um documento
+db.alunos.insertOne({
+  nome: "Marina Prado",
+  idade: 20,
+  curso: "ADS",
+  ativo: true,
+  hobbies: ["xadrez", "corrida"],
+  endereco: { cidade: "Mogi Guaçu", estado: "SP" },
+  ingresso: ISODate("2023-02-01")
+})
+
+// Vários documentos
+db.disciplinas.insertMany([
+  { nome: "Banco de Dados", cargaHoraria: 80, professor: { nome: "Lucas", titulacao: "Mestre" } },
+  { nome: "Algoritmos", cargaHoraria: 60, professor: { nome: "Paula", titulacao: "Doutora" } }
+])
+
+// ordered:false -> continua inserindo mesmo se algum documento der erro
+db.disciplinas.insertMany([ /* ... */ ], { ordered: false })
+
+// _id: se não informar, vira ObjectId automático. _id repetido = erro.
+
+
+---------------------------------------------------------------------
+3. FIND
+---------------------------------------------------------------------
+
+db.alunos.find()                              // todos
+db.alunos.findOne({ curso: "ADS" })           // só o primeiro que casar
+db.alunos.find({ curso: "ADS" })              // igualdade
+db.alunos.find({ hobbies: "xadrez" })         // array que CONTÉM o valor
+
+// Projeção
+db.alunos.find({}, { nome: 1, curso: 1 })           // só nome e curso (+ _id)
+db.alunos.find({}, { nome: 1, curso: 1, _id: 0 })   // sem _id
+db.alunos.find({}, { hobbies: 0 })                  // tudo MENOS hobbies
+
+// Ordenar / limitar / pular
+db.alunos.find().sort({ idade: 1 })           // crescente
+db.alunos.find().sort({ idade: -1 })          // decrescente
+db.alunos.find().sort({ curso: 1, nome: 1 })  // por vários campos
+db.alunos.find().limit(5)
+db.alunos.find().skip(10).limit(5)            // paginação
+
+// Contar e distintos
+db.alunos.countDocuments({ ativo: true })
+db.alunos.estimatedDocumentCount()
+db.alunos.distinct("curso")
+db.alunos.distinct("endereco.estado")
+
+
+---------------------------------------------------------------------
+4. OPERADORES DE COMPARAÇÃO
+---------------------------------------------------------------------
+
+$eq   igual            { idade: { $eq: 20 } }
+$ne   diferente        { curso: { $ne: "ADS" } }
+$gt   maior            { idade: { $gt: 25 } }
+$gte  maior ou igual   { idade: { $gte: 18 } }
+$lt   menor            { cargaHoraria: { $lt: 60 } }
+$lte  menor ou igual   { cargaHoraria: { $lte: 80 } }
+$in   está na lista    { curso: { $in: ["ADS", "GTI"] } }
+$nin  fora da lista    { curso: { $nin: ["ADS", "GTI"] } }
+
+// Intervalo no mesmo campo
+db.alunos.find({ idade: { $gte: 18, $lte: 25 } })
+
+// Datas
+db.alunos.find({ ingresso: { $gte: ISODate("2023-01-01"), $lt: ISODate("2024-01-01") } })
+
+
+---------------------------------------------------------------------
+5. OPERADORES LÓGICOS
+---------------------------------------------------------------------
+
+// AND implícito (vírgula entre condições)
+db.alunos.find({ curso: "ADS", ativo: true })
+
+// $and explícito (útil quando repete o mesmo campo)
+db.alunos.find({ $and: [ { idade: { $gt: 18 } }, { idade: { $lt: 30 } } ] })
+
+// $or
+db.alunos.find({ $or: [ { curso: "ADS" }, { idade: { $lt: 18 } } ] })
+
+// $nor (nenhuma condição verdadeira)
+db.alunos.find({ $nor: [ { ativo: false }, { curso: "GTI" } ] })
+
+// $not (nega um operador)
+db.alunos.find({ idade: { $not: { $gt: 30 } } })
+
+
+---------------------------------------------------------------------
+6. ELEMENTO, TIPO, REGEX, $expr
+---------------------------------------------------------------------
+
+// $exists
+db.alunos.find({ email: { $exists: true } })
+db.alunos.find({ email: { $exists: false } })
+
+// Campo existe mas é nulo / não é nulo
+db.alunos.find({ email: null })               // nulo OU inexistente
+db.alunos.find({ email: { $ne: null } })
+
+// $type
+db.alunos.find({ idade: { $type: "int" } })
+
+// Regex
+db.alunos.find({ nome: /^Ma/ })                          // começa com "Ma"
+db.alunos.find({ nome: /son$/i })                        // termina com "son" (i = ignora caixa)
+db.alunos.find({ nome: { $regex: "silva", $options: "i" } })  // contém "silva"
+
+// $expr: compara campos do próprio documento
+db.avaliacoes.find({ $expr: { $gt: ["$nota", 7] } })
+db.avaliacoes.find({ $expr: { $gt: [{ $size: "$itens" }, 2] } })  // mais de 2 itens
+
+
+---------------------------------------------------------------------
+7. DOCUMENTOS EMBUTIDOS E ARRAYS (consulta)
+---------------------------------------------------------------------
+
+// Notação de ponto, ENTRE ASPAS
+db.alunos.find({ "endereco.estado": "SP" })
+db.disciplinas.find({ "professor.titulacao": "Doutora" })
+
+// Igualdade EXATA de subdocumento (ordem dos campos importa!)
+db.alunos.find({ endereco: { cidade: "Mogi Guaçu", estado: "SP" } })
+
+// $all: contém todos os valores
+db.alunos.find({ hobbies: { $all: ["xadrez", "corrida"] } })
+
+// $size: tamanho exato do array
+db.alunos.find({ hobbies: { $size: 3 } })
+
+// $elemMatch: UM mesmo elemento satisfaz VÁRIAS condições
+db.avaliacoes.find({ itens: { $elemMatch: { tipo: "prova", valor: { $gte: 8 } } } })
+
+// Por posição do array (começa em 0)
+db.alunos.find({ "hobbies.0": "xadrez" })
+
+// Campo dentro de objetos de um array
+db.avaliacoes.find({ "itens.tipo": "trabalho" })
+
+
+---------------------------------------------------------------------
+8. UPDATE
+---------------------------------------------------------------------
+
+// updateOne: primeiro que casar | updateMany: todos que casarem
+// Sempre com operador ($set, $inc, ...).
+
+// $set (cria ou altera)
+db.alunos.updateOne({ nome: "Marina Prado" }, { $set: { ativo: false } })
+db.alunos.updateOne({ nome: "Marina Prado" }, { $set: { "endereco.cidade": "Campinas" } })
+
+// $unset (remove o campo)
+db.alunos.updateOne({ nome: "Marina Prado" }, { $unset: { email: "" } })
+
+// $inc (soma; valor negativo subtrai)
+db.alunos.updateMany({ curso: "ADS" }, { $inc: { idade: 1 } })
+
+// $mul (multiplica)
+db.disciplinas.updateMany({}, { $mul: { cargaHoraria: 1.5 } })
+
+// $min / $max (só altera se for menor / maior)
+db.disciplinas.updateOne({ nome: "Algoritmos" }, { $max: { cargaHoraria: 100 } })
+
+// $rename
+db.alunos.updateMany({}, { $rename: { ingresso: "dataIngresso" } })
+
+// $currentDate
+db.alunos.updateOne({ nome: "Marina Prado" }, { $currentDate: { ultimaAlteracao: true } })
+
+// ----- Arrays no update -----
+db.alunos.updateOne({ nome: "Marina Prado" }, { $push: { hobbies: "leitura" } })        // adiciona (duplica)
+db.alunos.updateOne({ nome: "Marina Prado" }, { $addToSet: { hobbies: "leitura" } })    // adiciona sem duplicar
+db.alunos.updateOne({ nome: "Marina Prado" }, { $pull: { hobbies: "xadrez" } })         // remove pelo valor
+db.alunos.updateOne({ nome: "Marina Prado" }, { $pop: { hobbies: -1 } })                // -1 primeiro | 1 último
+db.alunos.updateOne({ nome: "Marina Prado" }, { $push: { hobbies: { $each: ["yoga", "natação"] } } })
+
+// Operador posicional $: atualiza o elemento do array que casou no filtro
+db.avaliacoes.updateOne(
+  { _id: 1, "itens.tipo": "prova" },
+  { $set: { "itens.$.valor": 9.5 } }
+)
+
+// upsert: se não existir, insere
+db.disciplinas.updateOne(
+  { nome: "Redes" },
+  { $set: { cargaHoraria: 40 } },
+  { upsert: true }
+)
+
+// replaceOne: troca o documento inteiro (mantém o _id)
+db.disciplinas.replaceOne({ nome: "Redes" }, { nome: "Redes", cargaHoraria: 60 })
+
+// findOneAndUpdate: atualiza e devolve o documento
+db.alunos.findOneAndUpdate(
+  { nome: "Marina Prado" },
+  { $inc: { idade: 1 } },
+  { returnDocument: "after" }
+)
+
+
+---------------------------------------------------------------------
+9. DELETE
+---------------------------------------------------------------------
+
+db.alunos.deleteOne({ nome: "Marina Prado" })   // primeiro que casar
+db.alunos.deleteMany({ ativo: false })          // todos que casarem
+db.alunos.deleteMany({})                        // esvazia a coleção
+db.alunos.findOneAndDelete({ nome: "Marina Prado" })  // apaga e devolve
+
+// Boa prática: rode o find com o mesmo filtro antes de apagar.
+
+
+---------------------------------------------------------------------
+10. ÍNDICES
+---------------------------------------------------------------------
+
+db.alunos.createIndex({ nome: 1 })                        // simples
+db.alunos.createIndex({ curso: 1, idade: -1 })            // composto
+db.alunos.createIndex({ email: 1 }, { unique: true })     // único
+db.disciplinas.createIndex({ nome: "text" })              // texto
+db.alunos.getIndexes()
+db.alunos.dropIndex("nome_1")
+
+db.disciplinas.find({ $text: { $search: "dados" } })
+db.alunos.find({ nome: "Marina Prado" }).explain("executionStats")
+
+
+---------------------------------------------------------------------
+11. AGGREGATION
+---------------------------------------------------------------------
+
+// db.colecao.aggregate([ estagio1, estagio2, ... ])
+// Cada estágio recebe o resultado do anterior.
+//
+// $match $group $sort $limit $skip $project $unwind $lookup $addFields $count
+// Acumuladores do $group: $sum $avg $min $max $first $last $push $addToSet
+
+// Quantidade de alunos por curso
+db.alunos.aggregate([
+  { $group: { _id: "$curso", total: { $sum: 1 } } }
+])
+
+// Resumo geral (_id: null junta tudo)
+db.avaliacoes.aggregate([
+  { $group: { _id: null, media: { $avg: "$nota" }, maior: { $max: "$nota" }, menor: { $min: "$nota" } } }
+])
+
+// $match antes do $group (filtra primeiro, mais eficiente)
+db.alunos.aggregate([
+  { $match: { ativo: true } },
+  { $group: { _id: "$endereco.estado", total: { $sum: 1 } } },
+  { $sort: { total: -1 } }
+])
+
+// $unwind: um documento por elemento do array
+db.alunos.aggregate([
+  { $unwind: "$hobbies" },
+  { $group: { _id: "$hobbies", praticantes: { $sum: 1 } } },
+  { $sort: { praticantes: -1 } }
+])
+
+// $project: escolher, renomear e calcular
+db.alunos.aggregate([
+  { $project: { _id: 0, aluno: "$nome", uf: "$endereco.estado" } }
+])
+
+// $addFields: acrescenta campos mantendo os outros
+db.avaliacoes.aggregate([
+  { $addFields: { qtdItens: { $size: "$itens" } } }
+])
+
+// $lookup: juntar coleções
+db.avaliacoes.aggregate([
+  { $lookup: {
+      from: "alunos",            // coleção de destino
+      localField: "alunoId",     // campo desta coleção
+      foreignField: "_id",       // campo da outra
+      as: "aluno"                // nome do array resultante
+  } },
+  { $unwind: "$aluno" },
+  { $project: { _id: 0, aluno: "$aluno.nome", nota: 1, semestre: 1 } }
+])
+
+// $count
+db.alunos.aggregate([
+  { $match: { idade: { $gte: 18 } } },
+  { $count: "maiores" }
+])
+
+// Datas: $year $month $dayOfMonth
+db.alunos.aggregate([
+  { $group: { _id: { $year: "$ingresso" }, ingressantes: { $sum: 1 } } },
+  { $sort: { _id: 1 } }
+])
+
+// $push / $addToSet no $group: lista de nomes por curso
+db.alunos.aggregate([
+  { $group: { _id: "$curso", nomes: { $push: "$nome" } } }
+])
+
+// Condicional $cond: [condição, seExato, seNão]
+db.avaliacoes.aggregate([
+  { $project: {
+      nota: 1,
+      situacao: { $cond: [ { $gte: ["$nota", 6] }, "Aprovado", "Reprovado" ] }
+  } }
+])
+
+// Aritmética: $add $subtract $multiply $divide $round
+// Texto: $concat $toUpper $toLower
+// Média com arredondamento
+db.avaliacoes.aggregate([
+  { $group: { _id: "$disciplinaId", media: { $avg: "$nota" } } },
+  { $project: { media: { $round: ["$media", 1] } } }
+])
+
+
+---------------------------------------------------------------------
+12. OUTROS COMANDOS
+---------------------------------------------------------------------
+
+db.alunos.find().forEach(a => print(a.nome))
+db.alunos.find().toArray()
+
+// bulkWrite: várias operações numa chamada
+db.alunos.bulkWrite([
+  { insertOne: { document: { nome: "Teste", curso: "ADS" } } },
+  { updateOne: { filter: { nome: "Teste" }, update: { $set: { ativo: true } } } },
+  { deleteOne: { filter: { nome: "Teste" } } }
+])
+
+new ObjectId()                            // gera um ObjectId
+ObjectId("65f1a2b3c4d5e6f7a8b9c0d1")      // busca por _id automático
+new Date()                                // agora
+ISODate("2024-05-10")                     // data específica
+
+// Validação de esquema
+db.createCollection("professores", {
+  validator: { $jsonSchema: {
+    bsonType: "object",
+    required: ["nome", "titulacao"],
+    properties: {
+      nome:       { bsonType: "string" },
+      titulacao:  { enum: ["Especialista", "Mestre", "Doutor"] }
+    }
+  } }
+})
+
+// No terminal (fora do mongosh):
+// mongoexport --db=escola --collection=alunos --out=alunos.json
+// mongoimport --db=escola --collection=alunos --file=alunos.json --jsonArray
+// mongodump --db=escola --out=./backup
+// mongorestore ./backup
+
+
+---------------------------------------------------------------------
+13. RESUMO RÁPIDO
+---------------------------------------------------------------------
+
+CRUD:        insertOne/Many | find/findOne | updateOne/Many | deleteOne/Many
+Filtro:      $eq $ne $gt $gte $lt $lte $in $nin $and $or $not $nor $exists $regex
+Arrays:      $all $size $elemMatch | update: $push $pull $addToSet $pop
+Update:      $set $unset $inc $mul $rename $min $max
+Resultado:   sort() limit() skip() countDocuments() distinct()
+Aggregation: $match $group $sort $limit $project $unwind $lookup $addFields $count
+
+LEMBRETES:
+- Campos aninhados: "objeto.campo" entre aspas.
+- No $group, campos são referenciados com $ ("$nota") e o agrupador é o _id.
+- Use $unwind antes do $group quando o campo é array.
+- sort: 1 = crescente, -1 = decrescente.
+- Datas: ISODate("AAAA-MM-DD").
+- Teste o find antes de rodar deleteMany/updateMany.
