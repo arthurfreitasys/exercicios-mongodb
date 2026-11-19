@@ -22,3 +22,16 @@ use("loja_games");
 
 //6
 //db.jogos.find().sort({preco: -1}).limit(3)
+
+//7
+//db.jogos.find({plataformas: {$all: ["PC", "Switch"]}},{_id:0, titulo: 1, plataformas:1})
+
+//8
+//db.jogos.find({$or:[ {estoque: 0}, {avaliacao: {$gte: 9.5} } ] }, 
+//  {titulo:1, _id:0, avaliacao: 1, estoque:1})
+
+//9
+//db.clientes.find({endereco:{$exists:false}})
+
+//10
+//db.jogos.find({"desenvolvedora.pais": "Polônia"}, {titulo:1, _id:0, desenvolvedora:1})
